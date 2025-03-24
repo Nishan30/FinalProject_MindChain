@@ -1,0 +1,39 @@
+# Ignore environment files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Node modules
+node_modules/
+
+# Build output
+/dist
+/build
+
+# Logs
+logs/
+*.log
+
+# Dependency directories
+/.pnp
+.pnp.js
+
+# Testing folders
+/coverage
+
+# .next for Next.js projects
+.next
+
+# Yarn and npm lock files
+yarn.lock
+package-lock.json
+
+# IDE files
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db

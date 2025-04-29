@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Shield, FileText, User, Clock } from 'lucide-react';
+// Icons: Added Eye for the new card
+import { Shield, FileText, User, Clock, Eye } from 'lucide-react';
 import { useWallet } from '../context/WalletContext';
 
 const Dashboard: React.FC = () => {
@@ -14,100 +15,113 @@ const Dashboard: React.FC = () => {
     }
   }, [user, navigate]);
 
+  // Render loading or nothing if user is not yet available
   if (!user) {
+    // Optionally return a loading spinner here
     return null;
   }
 
+  // --- Helper Function for Card Rendering ---
+  const Card: React.FC<{ title: string; description: string; icon: React.ReactNode; onClick: () => void; bgColorClass: string; textColorClass: string }> =
+    ({ title, description, icon, onClick, bgColorClass, textColorClass }) => (
+    <div
+      onClick={onClick}
+      className="bg-white shadow-md rounded-lg p-6 cursor-pointer hover:shadow-lg transition-shadow transform hover:-translate-y-1"
+    >
+      <div className="flex items-center mb-4">
+        <div className={`${bgColorClass} p-3 rounded-full`}>
+          {React.cloneElement(icon as React.ReactElement, { className: `h-6 w-6 ${textColorClass}` })}
+        </div>
+        <h3 className="ml-4 text-lg font-medium text-gray-800">{title}</h3>
+      </div>
+      <p className="text-sm text-gray-600 leading-relaxed">
+        {description}
+      </p>
+    </div>
+  );
+  // --- End Helper Function ---
+
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Dashboard</h1>
-      
-      <div className="bg-white shadow-md rounded-lg p-6 mb-8">
-        <h2 className="text-xl font-semibold text-gray-800 mb-4">Welcome, {user.role === 'patient' ? 'Patient' : 'Provider'}</h2>
-        <p className="text-gray-600 mb-2">
-          Wallet Address: {user.address.substring(0, 6)}...{user.address.substring(user.address.length - 4)}
-        </p>
-        <p className="text-gray-600">
-          Role: <span className="capitalize">{user.role}</span>
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">Dashboard</h1> {/* Increased size/margin */}
+
+      {/* Welcome Banner */}
+      <div className="bg-white shadow-md rounded-lg p-6 mb-10 border-l-4 border-blue-500"> {/* Added border */}
+        <h2 className="text-xl font-semibold text-gray-800 mb-3">
+           Welcome, <span className="capitalize font-bold">{user.role}</span>!
+        </h2>
+        <p className="text-gray-600 text-sm mb-1">
+          Wallet Address: <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">{user.address}</span> {/* Display full address */}
         </p>
       </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+
+      {/* Action Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
+        {/* == Patient Cards == */}
         {user.role === 'patient' && (
           <>
-            <div 
+            <Card
+              title="Manage Consents"
+              description="Control who can access your mental health data and grant new permissions."
+              icon={<Shield />}
               onClick={() => navigate('/consents')}
-              className="bg-white shadow-md rounded-lg p-6 cursor-pointer hover:shadow-lg transition-shadow"
-            >
-              <div className="flex items-center mb-4">
-                <div className="bg-blue-100 p-3 rounded-full">
-                  <Shield className="h-6 w-6 text-blue-600" />
-                </div>
-                <h3 className="ml-3 text-lg font-medium text-gray-800">Manage Consents</h3>
-              </div>
-              <p className="text-gray-600">
-                Control who has access to your mental health data and for what purpose.
-              </p>
-            </div>
-            
-            <div 
+              bgColorClass="bg-blue-100"
+              textColorClass="text-blue-600"
+            />
+            <Card
+              title="My Health Records"
+              description="View and manage your encrypted health records securely stored on IPFS."
+              icon={<FileText />}
               onClick={() => navigate('/records')}
-              className="bg-white shadow-md rounded-lg p-6 cursor-pointer hover:shadow-lg transition-shadow"
-            >
-              <div className="flex items-center mb-4">
-                <div className="bg-green-100 p-3 rounded-full">
-                  <FileText className="h-6 w-6 text-green-600" />
-                </div>
-                <h3 className="ml-3 text-lg font-medium text-gray-800">My Records</h3>
-              </div>
-              <p className="text-gray-600">
-                View and manage your mental health records securely stored on the blockchain.
-              </p>
-            </div>
+              bgColorClass="bg-green-100"
+              textColorClass="text-green-600"
+             />
           </>
         )}
-        
+
+        {/* == Provider Cards == */}
         {user.role === 'provider' && (
           <>
-            <div 
-              onClick={() => navigate('/patients')}
-              className="bg-white shadow-md rounded-lg p-6 cursor-pointer hover:shadow-lg transition-shadow"
-            >
-              <div className="flex items-center mb-4">
-                <div className="bg-purple-100 p-3 rounded-full">
-                  <User className="h-6 w-6 text-purple-600" />
-                </div>
-                <h3 className="ml-3 text-lg font-medium text-gray-800">My Patients</h3>
-              </div>
-              <p className="text-gray-600">
-                Access patient records for which you have been granted consent.
-              </p>
-            </div>
+            <Card
+              title="Consented Patient Data" // Renamed for clarity
+              description="Access records for patients who have granted you active consent."
+              icon={<User />}
+              onClick={() => navigate('/patients')} // Keep route or adjust if needed
+              bgColorClass="bg-purple-100"
+              textColorClass="text-purple-600"
+            />
+             {/* --- NEW CARD --- */}
+            <Card
+              title="Verify Patient Consent" // Clearer Name
+              description="Enter a Consent ID provided by a patient to view its specific details and status."
+              icon={<Eye />} // Using Eye icon
+              onClick={() => navigate('/view-consent')} // Route to the existing page
+              bgColorClass="bg-yellow-100" // Different color
+              textColorClass="text-yellow-700"
+            />
+             {/* --- END NEW CARD --- */}
           </>
         )}
-        
-        <div 
-          onClick={() => navigate('/profile')}
-          className="bg-white shadow-md rounded-lg p-6 cursor-pointer hover:shadow-lg transition-shadow"
-        >
-          <div className="flex items-center mb-4">
-            <div className="bg-gray-100 p-3 rounded-full">
-              <User className="h-6 w-6 text-gray-600" />
-            </div>
-            <h3 className="ml-3 text-lg font-medium text-gray-800">Profile Settings</h3>
-          </div>
-          <p className="text-gray-600">
-            Manage your account settings and preferences.
-          </p>
-        </div>
+
+        {/* == Common Card == */}
+        <Card
+           title="Profile Settings"
+           description="Manage your account settings and preferences."
+           icon={<User />} // Re-using User icon is okay here
+           onClick={() => navigate('/profile')} // Assuming /profile exists
+           bgColorClass="bg-gray-100"
+           textColorClass="text-gray-600"
+        />
       </div>
-      
+
+      {/* Recent Activity Section */}
       <div className="bg-white shadow-md rounded-lg p-6">
         <div className="flex items-center mb-4">
           <Clock className="h-5 w-5 text-gray-500 mr-2" />
           <h3 className="text-lg font-medium text-gray-800">Recent Activity</h3>
         </div>
-        
+        {/* You would fetch and display actual activity here */}
         <div className="border-t border-gray-200 pt-4">
           <p className="text-gray-600 text-center py-4">
             No recent activity to display.

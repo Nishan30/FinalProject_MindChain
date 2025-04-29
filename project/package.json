@@ -10,8 +10,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "buffer": "^6.0.3",
     "ethers": "^6.11.1",
+    "ipfs-http-client": "^60.0.1",
     "lucide-react": "^0.344.0",
+    "pinata": "^2.2.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.22.3"

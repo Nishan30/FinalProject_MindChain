@@ -1,166 +1,154 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.9; // Using the same version as before
+pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/utils/Counters.sol";
-import "@openzeppelin/contracts/utils/Strings.sol"; // Import Strings for uint to string conversion if needed, or handle off-chain
 
 contract HealthDataContract {
     using Counters for Counters.Counter;
     Counters.Counter private _consentIds;
     Counters.Counter private _recordIds;
 
-    // --- Structs (Unchanged) ---
+    // --- Structs ---
     struct ConsentRecord {
         uint256 id;
-        address patientAddress;
-        address providerAddress;
-        string dataType;
-        string purpose;
-        uint256 expiryDate; // Store expiry date as timestamp
-        bool isActive;
+        address patientAddress;   // The patient granting consent
+        address providerAddress;  // The provider receiving consent
+        uint256 recordId;         // *** ID of the specific record being consented to ***
+        string purpose;           // Purpose of the consent
+        uint256 expiryDate;       // When this specific consent expires
+        bool isActive;            // If this specific consent is active
     }
 
     struct HealthRecord {
         uint256 id;
-        address patientAddress;
+        address patientAddress;   // Owner of the record
         string title;
         string description;
-        string dataHash; // IPFS hash of the *encrypted record data*
-        uint256 dateCreated; // Timestamp
+        string dataHash;          // IPFS hash of encrypted data
+        uint256 dateCreated;
     }
 
-    // --- Mappings (Existing + NEW) ---
+    // --- Mappings ---
     mapping(uint256 => ConsentRecord) public consents; // consentId => ConsentRecord
     mapping(uint256 => HealthRecord) public healthRecords; // recordId => HealthRecord
+    mapping(uint256 => mapping(address => string)) private _wrappedKeyIpfsHashes; // recordId => providerAddress => ipfsHashOfWrappedKey
 
-    // NEW MAPPING: Stores the IPFS hash of the wrapped (encrypted) AES key
-    // Links a record ID and a specific provider address to the location of the key needed by that provider for that record.
-    // recordId => providerAddress => ipfsHashOfWrappedKey
-    mapping(uint256 => mapping(address => string)) private _wrappedKeyIpfsHashes;
-
-    // Optional mapping (Unchanged, can be derived)
-    // mapping(address => address[]) public providerPatients;
-
-    // --- Events (Existing + NEW) ---
-    event ConsentGranted(uint256 indexed consentId, address indexed patientAddress, address indexed providerAddress, string dataType);
-    event ConsentRevoked(uint256 indexed consentId);
+    // --- Events ---
+    event ConsentGranted(uint256 indexed consentId, address indexed patientAddress, address indexed providerAddress, uint256 recordId, uint256 expiryDate); // Event includes recordId
+    event ConsentRevoked(uint256 indexed consentId); // Applies to a specific record consent
     event RecordUploaded(uint256 indexed recordId, address indexed patientAddress, string title, string dataHash);
-
-    // NEW EVENT: Emitted when a patient shares the wrapped key hash for a record with a provider
     event WrappedKeyShared(uint256 indexed recordId, address indexed patientAddress, address indexed providerAddress, string wrappedKeyIpfsHash);
 
 
-    // --- Modifiers (Unchanged) ---
-    modifier onlyPatient(address patientAddress) {
-        require(msg.sender == patientAddress, "Only patient can perform this action");
-        _;
-    }
-
-    modifier onlyProvider(address providerAddress) {
-        // Note: This modifier isn't strictly used in the key retrieval path below for simplicity,
-        // but could be added to getWrappedKeyHash if desired.
-        require(msg.sender == providerAddress, "Only provider can perform this action");
-        _;
-    }
-
-    modifier consentActive(uint256 consentId) {
-        require(consents[consentId].isActive, "Consent is not active");
-        require(block.timestamp <= consents[consentId].expiryDate, "Consent has expired");
-        _;
-    }
-
-    // validConsent modifier remains important for general access checks before attempting decryption
-    modifier validConsent(address patientAddress, address providerAddress, string memory dataType) {
-        bool foundConsent = false;
-        uint256 latestConsentExpiry = 0; // Track expiry if needed for finer logic
-
-        // Loop through consents to find *any* valid one matching the criteria
-        for (uint256 i = 1; i <= _consentIds.current(); i++) {
-             // Check if consent exists and belongs to the patient first to avoid unnecessary reads
-            if (consents[i].patientAddress == patientAddress && consents[i].providerAddress == providerAddress) {
-                 ConsentRecord storage consent = consents[i];
-                 // Use keccak256 for reliable string comparison
-                if (keccak256(bytes(consent.dataType)) == keccak256(bytes(dataType)) &&
-                    consent.isActive &&
-                    block.timestamp <= consent.expiryDate)
-                {
-                    foundConsent = true;
-                    // Optional: Store latest expiry if needed: latestConsentExpiry = consent.expiryDate;
-                    break; // Found a valid consent, no need to check further
-                }
-            }
-        }
-        require(foundConsent, "No active consent found for this provider and data type");
+    // --- Modifiers ---
+     modifier recordExists(uint256 recordId) {
+        require(healthRecords[recordId].id != 0, "Record: Does not exist");
         _;
     }
 
 
-    // --- Consent Functions (Unchanged) ---
+    // --- Consent Functions ---
 
+    /**
+     * @notice Grants consent for a specific record to a provider.
+     * @param providerAddress The provider receiving consent.
+     * @param recordId The ID of the specific health record being consented to.
+     * @param purpose Description of the consent's purpose.
+     * @param expiryDateTimestamp Unix timestamp when this consent expires.
+     * @return The ID of the newly created consent.
+     */
     function grantConsent(
         address providerAddress,
-        string memory dataType,
+        uint256 recordId,
         string memory purpose,
         uint256 expiryDateTimestamp
-    ) external onlyPatient(msg.sender) returns (uint256) {
-        // ... (implementation unchanged) ...
+    )
+        external
+        recordExists(recordId) // Ensure the record exists
+        returns (uint256)
+    {
+        require(providerAddress != address(0), "Consent: Invalid provider address");
+        require(expiryDateTimestamp > block.timestamp, "Consent: Expiry must be in the future");
+        // Check if caller owns the record they are granting consent for
+        require(healthRecords[recordId].patientAddress == msg.sender, "Consent: Caller does not own record");
+
         _consentIds.increment();
         uint256 consentId = _consentIds.current();
-        consents[consentId] = ConsentRecord({ id: consentId, patientAddress: msg.sender, providerAddress: providerAddress, dataType: dataType, purpose: purpose, expiryDate: expiryDateTimestamp, isActive: true });
-        emit ConsentGranted(consentId, msg.sender, providerAddress, dataType);
+        consents[consentId] = ConsentRecord({
+            id: consentId,
+            patientAddress: msg.sender, // Patient is the caller
+            providerAddress: providerAddress,
+            recordId: recordId, // Store the linked record ID
+            purpose: purpose,
+            expiryDate: expiryDateTimestamp,
+            isActive: true
+        });
+        emit ConsentGranted(consentId, msg.sender, providerAddress, recordId, expiryDateTimestamp);
         return consentId;
     }
 
+    /**
+     * @notice Revokes a specific consent (for a single record).
+     * @param consentId The ID of the consent to revoke.
+     */
     function revokeConsent(uint256 consentId) external {
-        // Ensure consent exists and belongs to caller
-        require(consents[consentId].id != 0, "Consent does not exist.");
-        require(consents[consentId].patientAddress == msg.sender, "Caller is not the patient who granted this consent.");
+        ConsentRecord storage consent = consents[consentId];
+        require(consent.id != 0, "Consent: Does not exist.");
+        // Only the patient who granted it can revoke
+        require(consent.patientAddress == msg.sender, "Consent: Caller is not the patient");
 
-        consents[consentId].isActive = false;
+        consent.isActive = false;
         emit ConsentRevoked(consentId);
     }
 
-    function getPatientConsents(address patientAddress) external view returns (ConsentRecord[] memory) {
-       // ... (implementation unchanged) ...
-        uint256 count = 0;
-        for (uint256 i = 1; i <= _consentIds.current(); i++) { if (consents[i].patientAddress == patientAddress) { count++; } }
-        ConsentRecord[] memory patientConsents = new ConsentRecord[](count);
-        uint256 index = 0;
-        for (uint256 i = 1; i <= _consentIds.current(); i++) { if (consents[i].patientAddress == patientAddress) { patientConsents[index] = consents[i]; index++; } }
-        return patientConsents;
+    // --- Access Check Function (Helper - potentially called off-chain/frontend) ---
+
+    /**
+     * @notice Checks if a specific provider has active consent for a specific record.
+     * @dev Iterates through all consents. Can be gas-intensive if called on-chain frequently. Best used off-chain.
+     * @param patientAddress The patient who might have granted consent.
+     * @param providerAddress The provider seeking access.
+     * @param recordId The specific record access is requested for.
+     * @return bool True if an active, non-expired consent exists for this specific record and provider.
+     */
+    function checkRecordSpecificAccess(
+        address patientAddress,
+        address providerAddress,
+        uint256 recordId
+    )
+        external
+        view
+        returns (bool)
+    {
+        // This loop can become very expensive if a patient has many consents!
+         for (uint256 i = 1; i <= _consentIds.current(); i++) {
+             // Avoid reading full struct if preliminary checks fail
+             if (consents[i].patientAddress == patientAddress &&
+                 consents[i].providerAddress == providerAddress &&
+                 consents[i].recordId == recordId)
+             {
+                 // Only read isActive and expiryDate if other fields match
+                  if (consents[i].isActive && block.timestamp <= consents[i].expiryDate) {
+                     return true; // Found valid consent for this record
+                  }
+             }
+         }
+         return false; // No matching active consent found
     }
 
 
-    // --- Record Functions (uploadRecord and getPatientRecords Unchanged) ---
-
-    /**
-     * @notice Patient uploads metadata for a new encrypted health record.
-     * @param title Title of the record.
-     * @param description Description of the record.
-     * @param dataHash IPFS hash of the *encrypted* record data (IV prepended).
-     * @return The ID of the newly created record.
-     */
+    // --- Record Functions (Unchanged) ---
     function uploadRecord(
-        string memory title,
-        string memory description,
-        string memory dataHash // This is the hash of the *encrypted file* on IPFS
-    ) external returns (uint256) { // Ensure msg.sender is the patient
+        string memory title, string memory description, string memory dataHash
+    ) external returns (uint256) {
         _recordIds.increment();
         uint256 recordId = _recordIds.current();
-        healthRecords[recordId] = HealthRecord({
-            id: recordId,
-            patientAddress: msg.sender, // Record owner is the uploader
-            title: title,
-            description: description,
-            dataHash: dataHash, // Hash of encrypted data
-            dateCreated: block.timestamp
-        });
+        healthRecords[recordId] = HealthRecord({ id: recordId, patientAddress: msg.sender, title: title, description: description, dataHash: dataHash, dateCreated: block.timestamp });
         emit RecordUploaded(recordId, msg.sender, title, dataHash);
-        return recordId; // Return the ID so patient can use it for sharing keys
+        return recordId;
     }
 
     function getPatientRecords(address patientAddress) external view returns (HealthRecord[] memory) {
-        // ... (implementation unchanged) ...
         uint256 count = 0;
         for (uint256 i = 1; i <= _recordIds.current(); i++) { if (healthRecords[i].patientAddress == patientAddress) { count++; } }
         HealthRecord[] memory patientRecords = new HealthRecord[](count);
@@ -169,90 +157,82 @@ contract HealthDataContract {
         return patientRecords;
     }
 
-    /**
-     * @notice Allows a provider with valid consent to retrieve record metadata (including encrypted data hash).
-     * @dev Access control enforced by validConsent modifier.
-     */
-    function getRecordById(
-        uint256 recordId,
-        address providerAddress, // Provider attempting access (will be msg.sender typically in FE call)
-        string memory dataType   // Data type provider claims consent for (must match a valid consent)
-    )
-        external
-        view
-        validConsent(healthRecords[recordId].patientAddress, providerAddress, dataType) // Check general consent first
-        returns (HealthRecord memory)
-    {
-         require(healthRecords[recordId].id != 0, "Record does not exist");
-         // No need to check providerAddress against msg.sender here, validConsent handles permission based on input providerAddress
+    function getRecordById(uint256 recordId) external view recordExists(recordId) returns (HealthRecord memory) {
         return healthRecords[recordId];
     }
 
-    function getConsentById(uint256 consentId) external view returns (ConsentRecord memory) {
-         require(consents[consentId].id != 0, "Consent does not exist.");
-        return consents[consentId];
-    }
-
-
-    // --- NEW Key Sharing Functions ---
-
-    /**
-     * @notice Patient calls this to store the IPFS hash of the wrapped encryption key for a specific record and provider.
-     * @dev This links the record, provider, and the key needed by that provider.
-     * @param recordId The ID of the health record this key relates to.
-     * @param providerAddress The address of the provider being granted access via this key.
-     * @param wrappedKeyIpfsHash The IPFS hash (CID) where the asymmetrically encrypted (wrapped) symmetric key is stored.
-     */
+    // --- Key Sharing Functions (Unchanged - still needed for decryption) ---
     function shareWrappedKeyHash(
-        uint256 recordId,
-        address providerAddress,
-        string memory wrappedKeyIpfsHash
-    ) external {
-        // 1. Check if the record exists
-        require(healthRecords[recordId].id != 0, "Record does not exist");
-        // 2. Check if the caller is the owner (patient) of the record
-        require(healthRecords[recordId].patientAddress == msg.sender, "Only the record owner can share the key hash");
-        // 3. Basic validation for inputs
-        require(providerAddress != address(0), "Provider address cannot be zero");
-        require(bytes(wrappedKeyIpfsHash).length > 0, "Wrapped key IPFS hash cannot be empty"); // Very basic check
-
-        // Optional but Recommended: Check if the patient has *some* active consent for this provider?
-        // This prevents sharing keys when no active consent relationship exists at all.
-        // bool hasSomeConsent = false;
-        // for (uint i = 1; i <= _consentIds.current(); i++) {
-        //     if (consents[i].patientAddress == msg.sender &&
-        //         consents[i].providerAddress == providerAddress &&
-        //         consents[i].isActive &&
-        //         block.timestamp <= consents[i].expiryDate) {
-        //         hasSomeConsent = true;
-        //         break;
-        //     }
-        // }
-        // require(hasSomeConsent, "No active consent found for this provider to share key with");
-
-        // 4. Store the hash
+        uint256 recordId, address providerAddress, string memory wrappedKeyIpfsHash
+    ) external recordExists(recordId) {
+         require(healthRecords[recordId].patientAddress == msg.sender, "KeyShare: Caller is not record owner");
+         require(providerAddress != address(0), "KeyShare: Invalid provider address");
+         require(bytes(wrappedKeyIpfsHash).length > 0, "KeyShare: Hash cannot be empty");
         _wrappedKeyIpfsHashes[recordId][providerAddress] = wrappedKeyIpfsHash;
-
-        // 5. Emit the event
         emit WrappedKeyShared(recordId, msg.sender, providerAddress, wrappedKeyIpfsHash);
     }
 
-    /**
-     * @notice Retrieves the IPFS hash of the wrapped encryption key for a given record and provider.
-     * @dev This hash points to the key needed by the provider to decrypt the specified record.
-     * @param recordId The ID of the health record.
-     * @param providerAddress The address of the provider whose key hash is being requested.
-     * @return The IPFS hash string, or an empty string if not found/shared.
-     */
     function getWrappedKeyHash(
-        uint256 recordId,
-        address providerAddress
-    ) external view returns (string memory) {
-        // Optional: Add access control? E.g., require msg.sender == providerAddress?
-        // Or require validConsent(healthRecords[recordId].patientAddress, providerAddress, dataType)?
-        // For simplicity now, allow public read access to the hash. Security relies on the key itself being encrypted.
-         require(healthRecords[recordId].id != 0, "Record does not exist"); // Prevent querying non-existent records
+        uint256 recordId, address providerAddress
+    ) external view recordExists(recordId) returns (string memory) {
+        require(providerAddress == msg.sender, "Access Denied: Caller is not the intended provider");
 
+        // Check if there's actually an active consent for this record/provider pair
+        bool hasValidConsent = false;
+        for (uint256 i = 1; i <= _consentIds.current(); i++) {
+            if (consents[i].patientAddress == healthRecords[recordId].patientAddress && // Check patient owner just in case
+                consents[i].providerAddress == providerAddress &&
+                consents[i].recordId == recordId &&
+                consents[i].isActive &&
+                block.timestamp <= consents[i].expiryDate)
+            {
+                hasValidConsent = true;
+                break;
+            }
+        }
+        require(hasValidConsent, "Access Denied: No active consent found for this record/provider");
         return _wrappedKeyIpfsHashes[recordId][providerAddress];
     }
+
+     // --- Other Getters ---
+     function getConsentById(uint256 consentId) external view returns (ConsentRecord memory) {
+         require(consents[consentId].id != 0, "Consent: Does not exist.");
+        return consents[consentId];
+    }
+
+    /**
+     * @notice Gets all consents granted BY a specific patient.
+     * @dev Useful for the patient's dashboard to see all individual grants they've made.
+     */
+    function getPatientConsents(address patientAddress) external view returns (ConsentRecord[] memory) {
+       uint256 count = 0;
+        for (uint256 i = 1; i <= _consentIds.current(); i++) { if (consents[i].patientAddress == patientAddress) { count++; } }
+        ConsentRecord[] memory patientConsents = new ConsentRecord[](count);
+        uint256 index = 0;
+        for (uint256 i = 1; i <= _consentIds.current(); i++) { if (consents[i].patientAddress == patientAddress) { patientConsents[index] = consents[i]; index++; } }
+        return patientConsents;
+    }
+
+     /**
+     * @notice Gets all consents granted TO a specific provider FOR a specific patient.
+     * @dev Useful for provider's view to see all individual record consents from one patient.
+     */
+     function getConsentsForProviderByPatient(address patientAddress, address providerAddress) external view returns (ConsentRecord[] memory) {
+       uint256 count = 0;
+        for (uint256 i = 1; i <= _consentIds.current(); i++) {
+            if (consents[i].patientAddress == patientAddress && consents[i].providerAddress == providerAddress) {
+                count++;
+            }
+        }
+        ConsentRecord[] memory providerConsents = new ConsentRecord[](count);
+        uint256 index = 0;
+        for (uint256 i = 1; i <= _consentIds.current(); i++) {
+             if (consents[i].patientAddress == patientAddress && consents[i].providerAddress == providerAddress) {
+                providerConsents[index] = consents[i];
+                index++;
+             }
+        }
+        return providerConsents;
+    }
+
 }

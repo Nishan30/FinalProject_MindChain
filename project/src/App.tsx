@@ -8,6 +8,8 @@ import RecordsPage from './pages/RecordsPage';
 import ViewConsentPage from './pages/viewConsent';
 import PatientRecordsViewerPage from './pages/patientRecorderViewPage';
 import { KeyProvider } from './context/KeyContext';
+import ViewPatientConsentsPage from './pages/viewConsentAddress';
+import ProfilePage from './pages/profile';
 
 function App() {
   return (
@@ -22,13 +24,16 @@ function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/consents" element={<ConsentsPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
               <Route path="/records" element={<RecordsPage />} />
               <Route path="/view-consent" element={<ViewConsentPage />} />
               <Route
              path="/patient-records/:patientAddress"
              element={<PatientRecordsViewerPage />}
            />
+           <Route path="/view-patient-consents" element={<ViewPatientConsentsPage />} />
             </Routes>
+            
           </main>
         </div>
       </Router>

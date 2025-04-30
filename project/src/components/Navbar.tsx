@@ -86,7 +86,7 @@ const Navbar: React.FC = () => {
               {/* Provider Links */}
               {user.role === 'provider' && (
                 <>
-                  <NavLink to="/patients" label="Patient Data" icon={<User size={16} />} />
+                  <NavLink to="/view-patient-consents" label="Patient Data" icon={<User size={16} />} />
                   <NavLink to="/view-consent" label="Verify Consent" icon={<Eye size={16} />} />
                 </>
               )}

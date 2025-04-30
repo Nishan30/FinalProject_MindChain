@@ -6,26 +6,22 @@ export interface User {
   role: 'patient' | 'provider' | 'admin' | null;
 }
 
-// Matches the Solidity ConsentRecord struct
 export interface ConsentRecord {
-  id: number;               // uint256 id;
-  patientAddress: string;   // address patientAddress;
-  providerAddress: string;  // address providerAddress;
-  dataType: string;         // string dataType;
-  purpose: string;          // string purpose;
-  expiryDate: number;       // uint256 expiryDate; (Store as Unix timestamp number)
-  isActive: boolean;        // bool isActive;
+  id: number;
+  patientAddress: string;
+  providerAddress: string;
+  recordId: number; // Added: ID of the specific record consented to
+  // dataType?: string; // Removed or optional if kept for informational purposes
+  purpose: string;
+  expiryDate: number; // Unix timestamp (seconds)
+  isActive: boolean;
 }
 
-// Matches the Solidity HealthRecord struct
 export interface HealthRecord {
-  id: number;               // uint256 id;
-  patientAddress: string;   // address patientAddress;
-  title: string;            // string title;
-  description: string;      // string description;
-  dataHash: string;         // string dataHash; (IPFS hash)
-  dateCreated: number;      // uint256 dateCreated; (Store as Unix timestamp number)
-  // Removed fields not present in the contract struct:
-  // lastAccessed?: string; // Not in contract
-  // accessibleTo: string[]; // Not in contract (access derived via consents)
+  id: number;
+  patientAddress: string;
+  title: string;
+  description: string;
+  dataHash: string;
+  dateCreated: number; // Unix timestamp (seconds)
 }

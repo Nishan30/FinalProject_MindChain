@@ -85,9 +85,9 @@ const Dashboard: React.FC = () => {
           <>
             <Card
               title="Consented Patient Data" // Renamed for clarity
-              description="Access records for patients who have granted you active consent."
+              description="Access records for patients who have granted you active consent using their wallet address."
               icon={<User />}
-              onClick={() => navigate('/patients')} // Keep route or adjust if needed
+              onClick={() => navigate('/view-patient-consents')} // Keep route or adjust if needed
               bgColorClass="bg-purple-100"
               textColorClass="text-purple-600"
             />

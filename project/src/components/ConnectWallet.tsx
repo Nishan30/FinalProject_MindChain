@@ -3,14 +3,14 @@ import { useWallet } from '../context/WalletContext';
 import { Wallet, LogOut } from 'lucide-react';
 
 const ConnectWallet: React.FC = () => {
-  const { connectWallet, disconnectWallet, isConnected, currentAccount, isConnecting } = useWallet();
+  const { connectWallet, disconnectWallet, isConnected, user, isConnecting } = useWallet();
 
   return (
     <div className="flex items-center">
       {isConnected ? (
         <div className="flex items-center space-x-2">
           <span className="text-sm text-gray-600 hidden md:inline">
-            {currentAccount?.substring(0, 6)}...{currentAccount?.substring(currentAccount.length - 4)}
+            {user?.address?.substring(0, 6)}...{user?.address?.substring(user?.address.length - 4)}
           </span>
           <button
             onClick={disconnectWallet}
@@ -22,7 +22,7 @@ const ConnectWallet: React.FC = () => {
         </div>
       ) : (
         <button
-          onClick={connectWallet}
+          onClick={(e) => connectWallet()}
           disabled={isConnecting}
           className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors disabled:opacity-70"
         >
